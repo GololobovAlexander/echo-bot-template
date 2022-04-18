@@ -132,12 +132,16 @@ respond h (MessageEvent message)
 isCommand :: Handle m a -> T.Text -> a -> Bool
 isCommand h _ message = case hTextFromMessage h message of
   Nothing -> False
-  Just _ -> error "Not implemented"
+  Just "/help" -> True
+  Just "/repeat" -> True
+  Just _ -> False
 
 handleHelpCommand :: Monad m => Handle m a -> m [Response a]
 handleHelpCommand h = do
   Logger.logInfo (hLogHandle h) "Got the help command"
-  error "Not implemented"
+  let config = confHelpReply $ hConfig h
+  let msg = hMessageFromText h config
+  return [MessageResponse msg]
 
 handleSettingRepetitionCount :: Monad m => Handle m a -> Int -> m [Response a]
 handleSettingRepetitionCount h count = do
@@ -149,8 +153,13 @@ handleRepeatCommand h = do
   Logger.logInfo (hLogHandle h) "Got the repeat command"
   error "Not implemented"
 
+messageRepeat :: RepetitionCount -> a -> [Response a]
+messageRepeat n message = replicate n (MessageResponse message)
+
 respondWithEchoedMessage :: Monad m => Handle m a -> a -> m [Response a]
 respondWithEchoedMessage h message = do
   Logger.logInfo (hLogHandle h) $
     "Echoing user input: " .< fromMaybe "<multimedia?>" (hTextFromMessage h message)
-  error "Not implemented"
+  let count = confRepetitionCount $ hConfig h
+  return $ messageRepeat count message
+
