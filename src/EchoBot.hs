@@ -14,8 +14,8 @@ module EchoBot
   )
 where
 
-import Data.Maybe (fromMaybe)
-import Data.Text (Text)
+import Data.Maybe (fromMaybe, fromJust)
+import Data.Text (Text, replace)
 import qualified Data.Text as T
 import Logger ((.<))
 import qualified Logger
@@ -125,16 +125,16 @@ respond :: Monad m => Handle m a -> Event a -> m [Response a]
 respond h (SetRepetitionCountEvent repetitionCount) =
   handleSettingRepetitionCount h repetitionCount
 respond h (MessageEvent message)
-  | isCommand h "/help" message = handleHelpCommand h
-  | isCommand h "/repeat" message = handleRepeatCommand h
+  | fromJust (hTextFromMessage h message) == "/repeat" = handleRepeatCommand h 
+  | fromJust (hTextFromMessage h message) == "/help" = handleHelpCommand h
   | otherwise = respondWithEchoedMessage h message
 
-isCommand :: Handle m a -> T.Text -> a -> Bool
-isCommand h _ message = case hTextFromMessage h message of
-  Nothing -> False
-  Just "/help" -> True
-  Just "/repeat" -> True
-  Just _ -> False
+-- isCommand :: Handle m a -> T.Text -> a -> Bool              -- template was trolling me. should redo later maybe
+-- isCommand h _ message = case hTextFromMessage h message of
+--   Nothing -> False
+--   Just "/help" -> True
+--   Just "/repeat" -> True
+--   Just _ -> False
 
 handleHelpCommand :: Monad m => Handle m a -> m [Response a]
 handleHelpCommand h = do
@@ -151,15 +151,13 @@ handleSettingRepetitionCount h count = do
 handleRepeatCommand :: Monad m => Handle m a -> m [Response a]
 handleRepeatCommand h = do
   Logger.logInfo (hLogHandle h) "Got the repeat command"
-  error "Not implemented"
-
-messageRepeat :: RepetitionCount -> a -> [Response a]
-messageRepeat n message = replicate n (MessageResponse message)
+  let count = confRepetitionCount $ hConfig h
+  let title = replace "{count}" (T.pack $ show count) (confRepeatReply $ hConfig h)
+  return [MenuResponse title [(count, SetRepetitionCountEvent count)]]
 
 respondWithEchoedMessage :: Monad m => Handle m a -> a -> m [Response a]
 respondWithEchoedMessage h message = do
   Logger.logInfo (hLogHandle h) $
     "Echoing user input: " .< fromMaybe "<multimedia?>" (hTextFromMessage h message)
   let count = confRepetitionCount $ hConfig h
-  return $ messageRepeat count message
-
+  return $ replicate count (MessageResponse message)
