@@ -13,6 +13,7 @@ import EchoBot (Config (..), Event (..), Handle (..), Response (..), State, make
 import qualified Logger
 import Test.Hspec (Expectation, Spec, describe, it, shouldBe, shouldNotBe, shouldSatisfy)
 import Test.QuickCheck (NonNegative (..), property, (==>))
+import Data.Maybe (fromMaybe)
 
 type Interp = WriterT [(Logger.Level, T.Text)] (S.StateT State IO)
 
@@ -51,7 +52,7 @@ spec =
       let h = handleWith config
       responses <- runBotWithConfig config $ do
         [MenuResponse _ opts] <- respond h $ MessageEvent "/repeat"
-        Just request <- pure $ lookup newRepCount opts
+        let request = fromMaybe (MessageEvent "") $ lookup newRepCount opts
         _ <- respond h request
         respond h $ MessageEvent comment
       responses `shouldBe` replicate newRepCount (MessageResponse comment)
