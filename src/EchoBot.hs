@@ -159,5 +159,6 @@ respondWithEchoedMessage :: Monad m => Handle m a -> a -> m [Response a]
 respondWithEchoedMessage h message = do
   Logger.logInfo (hLogHandle h) $
     "Echoing user input: " .< fromMaybe "<multimedia?>" (hTextFromMessage h message)
-  let count = confRepetitionCount $ hConfig h
+  state <- hGetState h
+  let count = stRepetitionCount state
   return $ replicate count (MessageResponse message)
