@@ -151,7 +151,8 @@ handleSettingRepetitionCount h count = do
 handleRepeatCommand :: Monad m => Handle m a -> m [Response a]
 handleRepeatCommand h = do
   Logger.logInfo (hLogHandle h) "Got the repeat command"
-  let count = confRepetitionCount $ hConfig h
+  state <- hGetState h
+  let count = stRepetitionCount state
   let title = replace "{count}" (T.pack $ show count) (confRepeatReply $ hConfig h)
   return [MenuResponse title [(count, SetRepetitionCountEvent count)]]
 
