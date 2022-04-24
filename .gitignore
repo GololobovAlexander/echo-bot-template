@@ -1,3 +1,5 @@
 .stack-work/
 *~
 /echo-bot.cabal
+.vscode/phoityne.log
+.vscode/launch.json
