@@ -139,8 +139,8 @@ respond h (MessageEvent message)
 handleHelpCommand :: Monad m => Handle m a -> m [Response a]
 handleHelpCommand h = do
   Logger.logInfo (hLogHandle h) "Got the help command"
-  let config = confHelpReply $ hConfig h
-  let msg = hMessageFromText h config
+  let text = confHelpReply $ hConfig h
+  let msg = hMessageFromText h text
   return [MessageResponse msg]
 
 handleSettingRepetitionCount :: Monad m => Handle m a -> Int -> m [Response a]
