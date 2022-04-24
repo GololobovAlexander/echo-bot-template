@@ -146,7 +146,9 @@ handleHelpCommand h = do
 handleSettingRepetitionCount :: Monad m => Handle m a -> Int -> m [Response a]
 handleSettingRepetitionCount h count = do
   Logger.logInfo (hLogHandle h) $ "The user has set the repetition count to " .< count
-  error "Not implemented"
+  let modState x = x {stRepetitionCount = count}
+  hModifyState' h modState
+  return [MessageResponse $ hMessageFromText h ""]
 
 handleRepeatCommand :: Monad m => Handle m a -> m [Response a]
 handleRepeatCommand h = do
@@ -154,7 +156,8 @@ handleRepeatCommand h = do
   state <- hGetState h
   let count = stRepetitionCount state
   let title = replace "{count}" (T.pack $ show count) (confRepeatReply $ hConfig h)
-  return [MenuResponse title [(count, SetRepetitionCountEvent count)]]
+  let makeMenu = zip [1..5] (map SetRepetitionCountEvent [1..5])
+  return [MenuResponse title makeMenu]
 
 respondWithEchoedMessage :: Monad m => Handle m a -> a -> m [Response a]
 respondWithEchoedMessage h message = do
