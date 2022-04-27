@@ -10,6 +10,7 @@ where
 import qualified Data.Text as T
 import qualified Logger
 import qualified System.IO
+import qualified Data.Text.IO as TIO
 
 data Config = Config
   { -- | A file handle to output formatted log messages to with
@@ -26,4 +27,4 @@ withHandle :: Config -> (Logger.Handle IO -> IO ()) -> IO ()
 withHandle config f = f Logger.Handle {Logger.hLowLevelLog = logWith config}
 
 logWith :: Config -> Logger.Level -> T.Text -> IO ()
-logWith _ _ _ = error "Not implemented"
+logWith _ _ = TIO.putStrLn -- temporary implementation
