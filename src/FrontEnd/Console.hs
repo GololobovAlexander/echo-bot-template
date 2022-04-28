@@ -13,6 +13,7 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as TIO
 import qualified EchoBot
 import Data.Maybe (fromMaybe)
+import Data.Char (isDigit)
 
 newtype Handle = Handle
   { hBotHandle :: EchoBot.Handle IO T.Text
@@ -29,11 +30,15 @@ run h = do
       getR ((EchoBot.MessageResponse a) : xs) = TIO.putStrLn a >> getR xs
       getR ((EchoBot.MenuResponse title xs) : _) = do
         TIO.putStrLn title
-        TIO.putStrLn "Input the number of repetitions"
+        TIO.putStrLn "Input the number of repetitions. It must be an integer between 1 and 5"
         newCount <- getLine
-        let nc = read newCount
-        let newEvent = fromMaybe (EchoBot.MessageEvent "") $ lookup nc xs
-        _ <- EchoBot.respond handle newEvent
-        TIO.putStrLn ""
+        if all isDigit newCount
+        then do
+          let nc = read newCount
+          let newEvent = fromMaybe (EchoBot.MessageEvent "Wrong repetition count") $ lookup nc xs
+          _ <- EchoBot.respond handle newEvent
+          TIO.putStrLn ""
+        else getR responses
   getR responses
   run h
+  
