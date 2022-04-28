@@ -29,7 +29,7 @@ run h = do
       getR ((EchoBot.MessageResponse a) : xs) = TIO.putStrLn a >> getR xs
       getR ((EchoBot.MenuResponse title xs) : _) = do
         TIO.putStrLn title
-        TIO.putStrLn "Input the number of repeatitions"
+        TIO.putStrLn "Input the number of repetitions"
         newCount <- getLine
         let nc = read newCount
         let newEvent = fromMaybe (EchoBot.MessageEvent "") $ lookup nc xs
