@@ -18,8 +18,8 @@ import qualified System.IO
 getBotConfig :: IO EchoBot.Config
 getBotConfig = return $ EchoBot.Config -- this need to be in another file for easier control over parameters
   { EchoBot.confHelpReply = T.pack "that's helpful",
-    EchoBot.confRepeatReply = T.pack "repeat",
-    EchoBot.confRepetitionCount = 3
+    EchoBot.confRepeatReply = T.pack "Current repetition count is {count}",
+    EchoBot.confRepetitionCount = 1
   }
 
 getLoggerConfig :: IO Logger.Impl.Config
