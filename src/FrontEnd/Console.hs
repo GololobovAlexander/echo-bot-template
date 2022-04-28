@@ -29,13 +29,14 @@ run h = do
   responses <- EchoBot.respond handle (EchoBot.MessageEvent message)
   let getR [] = putStrLn ""
       getR ((EchoBot.MessageResponse a) : xs) = TIO.putStrLn a >> getR xs
-      getR ((EchoBot.MenuResponse _ xs) : _) = do
-        putStrLn "Input the number of repeatitions"
+      getR ((EchoBot.MenuResponse title xs) : _) = do
+        TIO.putStrLn title
+        TIO.putStrLn "Input the number of repeatitions"
         newCount <- getLine
         let nc = read newCount
         let newEvent = fromMaybe (EchoBot.MessageEvent "") $ lookup nc xs
         _ <- EchoBot.respond handle newEvent
-        putStrLn ""
+        TIO.putStrLn ""
   getR responses
   --let texts = map (getR handle) responses
   --printList texts
