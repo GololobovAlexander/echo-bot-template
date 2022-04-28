@@ -21,9 +21,7 @@ newtype Handle = Handle
 run :: Handle -> IO ()
 run h = do
   TIO.putStrLn "Please input message, /help or /repeat command"
-  -- 1. Read a line from the console.
   line <- getLine
-  -- 2. Send it to the bot, get its response and output it.
   let handle = hBotHandle h
   let message = EchoBot.hMessageFromText handle (T.pack line)
   responses <- EchoBot.respond handle (EchoBot.MessageEvent message)
@@ -38,8 +36,4 @@ run h = do
         _ <- EchoBot.respond handle newEvent
         TIO.putStrLn ""
   getR responses
-  --let texts = map (getR handle) responses
-  --printList texts
-  -- 3. Go to 1.
   run h
-  -- error "Not implemented"
