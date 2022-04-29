@@ -11,7 +11,7 @@ import qualified EchoBot
 import qualified Logger.Impl
 import qualified Data.Text as T
 import qualified Logger
-import qualified System.IO
+import qualified System.IO   
 
 -- | Gets the bot config. In any case it can provide reasonable
 -- default values.
