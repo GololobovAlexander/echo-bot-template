@@ -32,13 +32,15 @@ run h = do
         TIO.putStrLn title
         TIO.putStrLn "Input the number of repetitions. It must be an integer between 1 and 5"
         newCount <- getLine
-        if all isDigit newCount
+        if all isDigit newCount && (read newCount :: Int) <= 5 
         then do
           let nc = read newCount
           let newEvent = fromMaybe (EchoBot.MessageEvent "Wrong repetition count") $ lookup nc xs
           _ <- EchoBot.respond handle newEvent
           TIO.putStrLn ""
-        else getR responses
+        else do
+          putStrLn "Incorrect repetition count. Please enter again" 
+          getR responses
   getR responses
   run h
   
