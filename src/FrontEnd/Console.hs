@@ -26,20 +26,21 @@ run h = do
   let handle = hBotHandle h
   let message = EchoBot.hMessageFromText handle (T.pack line)
   responses <- EchoBot.respond handle (EchoBot.MessageEvent message)
-  let getR [] = putStrLn ""
+  let getR [] = TIO.putStrLn ""
       getR ((EchoBot.MessageResponse a) : xs) = TIO.putStrLn a >> getR xs
       getR ((EchoBot.MenuResponse title xs) : _) = do
         TIO.putStrLn title
         TIO.putStrLn "Input the number of repetitions. It must be an integer between 1 and 5"
         newCount <- getLine
-        if all isDigit newCount && (read newCount :: Int) <= 5 
+        let intCount = (read newCount :: Int)
+        if all isDigit newCount && not (null newCount) && intCount <= 5 && intCount > 0
         then do
           let nc = read newCount
           let newEvent = fromMaybe (EchoBot.MessageEvent "Wrong repetition count") $ lookup nc xs
           _ <- EchoBot.respond handle newEvent
           TIO.putStrLn ""
         else do
-          putStrLn "Incorrect repetition count. Please enter again" 
+          TIO.putStrLn "Incorrect repetition count. Please enter again"
           getR responses
   getR responses
   run h
