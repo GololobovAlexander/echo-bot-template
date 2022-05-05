@@ -43,13 +43,13 @@ data From = From {
   from_id         :: Integer,
   is_bot          :: Bool,
   from_first_name :: String,
-  from_username   :: String,
+  from_username   :: Maybe String,
   language_code   :: Maybe String
 } deriving (Show, Generic)
 
 instance FromJSON From where
   parseJSON (Object v) = From <$> v .: "id" <*> v .: "is_bot" <*> v .: "first_name" <*> v 
-                                                  .: "username" <*> v .:? "language_code"
+                                                  .:? "username" <*> v .:? "language_code"
   parseJSON _ = mzero
 
 data Chat = Chat {
