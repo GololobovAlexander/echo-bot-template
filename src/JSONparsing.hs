@@ -31,12 +31,12 @@ data Message = Message {
     from       :: From,
     chat       :: Chat,
     date       :: Integer,
-    text       :: String
+    text       :: Maybe String
 } deriving (Show, Generic)
 
 instance FromJSON Message where
   parseJSON (Object v) = Message <$> v .: "message_id" <*> v .: "from" <*> v 
-                                       .: "chat" <*> v .: "date" <*> v .: "text"
+                                       .: "chat" <*> v .: "date" <*> v .:? "text"
   parseJSON _ = mzero
 
 data From = From {
@@ -44,12 +44,12 @@ data From = From {
   is_bot          :: Bool,
   from_first_name :: String,
   from_username   :: String,
-  language_code   :: String
+  language_code   :: Maybe String
 } deriving (Show, Generic)
 
 instance FromJSON From where
   parseJSON (Object v) = From <$> v .: "id" <*> v .: "is_bot" <*> v .: "first_name" <*> v 
-                                                  .: "username" <*> v .: "language_code"
+                                                  .: "username" <*> v .:? "language_code"
   parseJSON _ = mzero
 
 data Chat = Chat {
