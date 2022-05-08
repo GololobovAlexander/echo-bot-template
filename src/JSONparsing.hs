@@ -4,7 +4,6 @@
 module JSONparsing where
 
 import Control.Monad (MonadPlus (mzero))
-import Control.Monad.IO.Class ()
 import Data.Aeson ( (.:), (.:?), FromJSON(parseJSON), Value(Object) )
 import GHC.Generics ( Generic )
 
