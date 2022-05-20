@@ -9,6 +9,7 @@ import Data.IORef (modifyIORef', newIORef, readIORef)
 import qualified Data.Text as T
 import qualified EchoBot
 import qualified FrontEnd.Console
+import qualified FrontEnd.Telegram
 import qualified Logger
 import qualified Logger.Impl
 import System.Exit (die)
@@ -18,8 +19,9 @@ main = do
   withLogHandle $ \logHandle -> do
     frontEnd <- Config.getFrontEndType
     case frontEnd of
-      ConfigurationTypes.TelegramFrontEnd ->
-        error "Not implemented"
+      ConfigurationTypes.TelegramFrontEnd -> do
+        botHandle <- makeBotHandleForTelegramText logHandle
+        runTelegramFrontEnd botHandle
       ConfigurationTypes.ConsoleFrontEnd -> do
         botHandle <- makeBotHandleForPlainText logHandle
         runConsoleFrontEnd botHandle
@@ -28,6 +30,13 @@ runConsoleFrontEnd :: EchoBot.Handle IO T.Text -> IO ()
 runConsoleFrontEnd botHandle =
   FrontEnd.Console.run
     FrontEnd.Console.Handle {FrontEnd.Console.hBotHandle = botHandle}
+
+
+runTelegramFrontEnd :: EchoBot.Handle IO T.Text -> IO () 
+runTelegramFrontEnd botHandle = 
+  FrontEnd.Telegram.run
+    FrontEnd.Telegram.Handle {FrontEnd.Telegram.hBotHandle = botHandle} 
+
 
 withLogHandle :: (Logger.Handle IO -> IO ()) -> IO ()
 withLogHandle f = do
@@ -51,6 +60,21 @@ withLogHandle f = do
 --   @hMessageFromText@ and @hTextFromMessage@.
 makeBotHandleForPlainText :: Logger.Handle IO -> IO (EchoBot.Handle IO T.Text)
 makeBotHandleForPlainText logHandle = do
+  botConfig <- Config.getBotConfig
+  initialState <- either (die . T.unpack) pure $ EchoBot.makeState botConfig
+  stateRef <- newIORef initialState
+  pure
+    EchoBot.Handle
+      { EchoBot.hGetState = readIORef stateRef,
+        EchoBot.hModifyState' = modifyIORef' stateRef,
+        EchoBot.hLogHandle = logHandle,
+        EchoBot.hConfig = botConfig,
+        EchoBot.hTextFromMessage = Just,
+        EchoBot.hMessageFromText = id
+      }
+
+makeBotHandleForTelegramText :: Logger.Handle IO -> IO (EchoBot.Handle IO T.Text)
+makeBotHandleForTelegramText logHandle = do
   botConfig <- Config.getBotConfig
   initialState <- either (die . T.unpack) pure $ EchoBot.makeState botConfig
   stateRef <- newIORef initialState
