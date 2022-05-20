@@ -17,7 +17,7 @@ import qualified System.IO
 -- default values.
 getBotConfig :: IO EchoBot.Config
 getBotConfig = return $ EchoBot.Config -- this need to be in another file for easier control over parameters
-  { EchoBot.confHelpReply = T.pack "that's helpful",
+  { EchoBot.confHelpReply = T.pack "If you want to change the repetition count of echoed messages send /repeat. Otherwise just enter your message",
     EchoBot.confRepeatReply = T.pack "Current repetition count is {count}",
     EchoBot.confRepetitionCount = 1
   }
@@ -29,4 +29,4 @@ getLoggerConfig = return $ Logger.Impl.Config
   }
 
 getFrontEndType :: IO ConfigurationTypes.FrontEndType
-getFrontEndType = return ConfigurationTypes.ConsoleFrontEnd -- need to make in choose between telegram and console
+getFrontEndType = return ConfigurationTypes.TelegramFrontEnd -- need to make in choose between telegram and console
