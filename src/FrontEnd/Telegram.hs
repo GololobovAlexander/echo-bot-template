@@ -1,7 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
 
 module FrontEnd.Telegram where
-
+import Control.Concurrent
 import Data.Aeson (encode)
 import Network.HTTP.Req
 import Token (token)
@@ -17,25 +18,65 @@ newtype Handle = Handle
   }
 
 data State = State
-  { state :: EchoBot.State,
-    user  :: Integer}
+  {
+    user  :: Integer,
+    last_id :: Integer,
+    chat_id :: Integer} deriving (Show)
 
-run :: FrontEnd.Telegram.Handle -> IO ()
-run h = runReq defaultHttpConfig $ do
-  let handle = hBotHandle h 
-  response <- req
+makeTempState :: State
+makeTempState = State {
+  user = 0,
+  last_id = 0,
+  chat_id = 0
+}
+
+makeRequest :: Req (JsonResponse TelegramResponse)
+makeRequest = req
                 GET
                 (https "api.telegram.org" /: T.pack ("bot" ++ token) /: "getUpdates")
                 NoReqBody
                 jsonResponse
                 mempty
+
+newState :: State
+newState = makeTempState
+
+modState :: Integer -> State -> IO ()
+modState n state = print $ state {last_id = n}
+
+run :: FrontEnd.Telegram.Handle -> IO ()
+run h = sup h 0
+
+getMessage :: TelegramResponse -> Maybe Message
+getMessage = message . last . telegramResponseResult
+
+extractMessage :: Maybe Message-> Either T.Text Message
+extractMessage (Just x) = Right x
+extractMessage Nothing = Left "Not a text message"
+
+getText :: Message -> Maybe T.Text
+getText = incoming_text
+
+extractText :: Maybe T.Text -> Either T.Text T.Text
+extractText (Just x) = Right x
+extractText Nothing = Left "Have no text"
+
+sup :: Handle -> Integer -> IO a
+sup h lastid = runReq defaultHttpConfig $ do
+  let handle = hBotHandle h
+  response <- makeRequest
   let responseB = responseBody response :: TelegramResponse
-  let txt = fromJust . incoming_text . fromJust . message . last . telegramResponseResult $ responseB 
-  let ch = fromJust . cid . chat . fromJust . message . last . telegramResponseResult $ responseB
-  let msg = EchoBot.hMessageFromText handle $ T.pack txt
-  responses <- liftIO $ EchoBot.respond handle (EchoBot.MessageEvent msg)
-  _ <- sendResponses responses ch
-  liftIO $ print responseB
+  let responseId = update_id . last . telegramResponseResult $ responseB
+  if responseId == lastid
+  then liftIO $ sup h lastid
+  else do
+    let txt = fromJust . incoming_text . fromJust . message . last . telegramResponseResult $ responseB
+    let ch = T.pack . show $ fromJust . cid . chat . fromJust . message . last . telegramResponseResult $ responseB
+    let msg = EchoBot.hMessageFromText handle txt
+    responses <- liftIO $ EchoBot.respond handle (EchoBot.MessageEvent msg)
+    _ <- sendResponses responses ch
+    liftIO $ threadDelay 100000
+    liftIO $ sup h responseId
 
 key1 :: Button
 key1 = Button {text = "1", callback_data = "1"}
@@ -56,26 +97,27 @@ key5 = Button {text = "5", callback_data = "5"}
 keyboard :: Inline
 keyboard = Inline {inline_keyboard = [[key1, key2, key3, key4, key5]]}
 
-keyboardEncoded :: String
+keyboardEncoded :: T.Text
 keyboardEncoded = read . show $ encode keyboard
 
-sendMessage :: (MonadHttp m, Show a) => a -> String -> m IgnoreResponse
+sendMessage :: MonadHttp m => T.Text -> T.Text -> m IgnoreResponse
 sendMessage ch txt = req
                 GET
                 (https "api.telegram.org" /: T.pack ("bot" ++ token) /: "sendMessage")
                 NoReqBody
                 ignoreResponse
-                (mconcat $ fmap (uncurry (=:)) [("chat_id", show ch), ("text", txt)])
+                (mconcat $ fmap (uncurry (=:)) [("chat_id", ch), ("text", txt)])
 
-sendKeyboard :: (MonadHttp m, Show a) => a -> String -> m IgnoreResponse
-sendKeyboard ch txt = req 
+
+sendKeyboard :: MonadHttp m => T.Text -> T.Text -> m IgnoreResponse
+sendKeyboard ch txt = req
               GET
               (https "api.telegram.org" /: T.pack ("bot" ++ token) /: "sendMessage")
               NoReqBody
               ignoreResponse
-              (mconcat $ fmap (uncurry (=:)) [("chat_id", show ch), ("text", txt), ("reply_markup", keyboardEncoded)]) -- !!
+              (mconcat $ fmap (uncurry (=:)) [("chat_id", ch), ("text", txt), ("reply_markup", keyboardEncoded)])
 
-sendResponses :: (MonadHttp m, Show t) => [EchoBot.Response T.Text] -> t -> m IgnoreResponse
+sendResponses :: MonadHttp m => [EchoBot.Response T.Text] -> T.Text -> m IgnoreResponse
 sendResponses [] ch = sendMessage ch "Please enter command or send a message"
-sendResponses (EchoBot.MessageResponse x : xs) ch = sendMessage ch (T.unpack x) >> sendResponses xs ch
-sendResponses ((EchoBot.MenuResponse _ _) : _) ch = sendKeyboard ch "Please choose the repetition count"
+sendResponses (EchoBot.MessageResponse x : xs) ch = sendMessage ch x >> sendResponses xs ch
+sendResponses ((EchoBot.MenuResponse title _) : _) ch = sendKeyboard ch title
