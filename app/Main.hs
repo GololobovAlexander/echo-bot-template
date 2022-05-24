@@ -31,7 +31,6 @@ runConsoleFrontEnd botHandle =
   FrontEnd.Console.run
     FrontEnd.Console.Handle {FrontEnd.Console.hBotHandle = botHandle}
 
-
 runTelegramFrontEnd :: EchoBot.Handle IO T.Text -> IO () 
 runTelegramFrontEnd botHandle = 
   FrontEnd.Telegram.run
