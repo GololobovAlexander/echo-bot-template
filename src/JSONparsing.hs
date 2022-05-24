@@ -1,13 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# OPTIONS_GHC -Wno-unused-imports #-}
-{-# OPTIONS_GHC -Wno-name-shadowing #-}
 
 module JSONparsing where
 
 import Control.Monad (MonadPlus (mzero))
-import Data.Aeson ( (.:), (.:?), FromJSON(parseJSON), Value(Object), ToJSON, toJSON, object, KeyValue ((.=)), toEncoding, pairs)
+import Data.Aeson ( (.:), (.:?), FromJSON(parseJSON), Value(Object), ToJSON, KeyValue ((.=)), toEncoding, pairs)
 import GHC.Generics ( Generic )
+import Data.Text (Text)
 
 data TelegramResponse = TelegramResponse { 
     telegramResponseOk     :: Bool, 
@@ -32,7 +31,7 @@ data Message = Message {
     from       :: From,
     chat       :: Chat,
     date       :: Integer,
-    incoming_text       :: Maybe String
+    incoming_text       :: Maybe Text
 } deriving (Show, Generic)
 
 instance FromJSON Message where
@@ -43,9 +42,9 @@ instance FromJSON Message where
 data From = From {
   from_id         :: Integer,
   is_bot          :: Bool,
-  from_first_name :: Maybe String,
-  from_username   :: Maybe String,
-  language_code   :: Maybe String
+  from_first_name :: Maybe Text,
+  from_username   :: Maybe Text,
+  language_code   :: Maybe Text
 } deriving (Show, Generic)
 
 instance FromJSON From where
@@ -55,9 +54,9 @@ instance FromJSON From where
 
 data Chat = Chat {
   cid :: Maybe Integer,
-  first_name :: Maybe String,
-  username   :: Maybe String,
-  chat_type  :: Maybe String
+  first_name :: Maybe Text,
+  username   :: Maybe Text,
+  chat_type  :: Maybe Text
 } deriving (Show, Generic)
 
 instance FromJSON Chat where
@@ -65,16 +64,32 @@ instance FromJSON Chat where
   parseJSON _ = mzero
 
 data Button = Button {
-  text :: String,
-  callback_data :: String
+  text :: Text,
+  callback_data :: Text
   } deriving (Show, Generic)
 
 instance ToJSON Button where
-  toEncoding (Button text callback_data) =
-    pairs ("text" .= text <> "callback_data" .= callback_data)
+  toEncoding (Button txt callback) =
+    pairs ("text" .= txt <> "callback_data" .= callback)
 
 newtype Inline = Inline {
   inline_keyboard :: [[Button]]
 } deriving (Show, Generic)
 
 instance ToJSON Inline where 
+
+data CallbackQuery = CallbackQuery {
+  query_id          :: Text,
+  query_from        :: From,
+  query_message     :: Maybe Message,
+  inline_message_id :: Maybe Text,
+  chat_instance     :: Maybe Text,
+  query_data        :: Maybe Text,
+  game_short_name   :: Maybe Text
+}
+
+instance FromJSON CallbackQuery where
+  parseJSON (Object v) = CallbackQuery <$> v .: "id" <*> v .: "from" <*> v .:? "message" <*>
+                                           v .:? "inline_message_id" <*> v .:? "chat_instance" <*>
+                                           v .:? "data" <*> v .:? "game_short_name"
+  parseJSON _ = mzero 
