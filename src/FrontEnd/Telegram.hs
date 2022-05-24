@@ -50,16 +50,16 @@ run h = sup h 0
 getMessage :: TelegramResponse -> Maybe Message
 getMessage = message . last . telegramResponseResult
 
-extractMessage :: Maybe Message-> Either T.Text Message
-extractMessage (Just x) = Right x
-extractMessage Nothing = Left "Not a text message"
+extractMessage :: Maybe Message -> Message
+extractMessage (Just x) = x
+extractMessage Nothing = error "Not a message?"
 
 getText :: Message -> Maybe T.Text
 getText = incoming_text
 
-extractText :: Maybe T.Text -> Either T.Text T.Text
-extractText (Just x) = Right x
-extractText Nothing = Left "Have no text"
+extractText :: Maybe T.Text -> T.Text
+extractText (Just x) = x
+extractText Nothing = error "Not a text"
 
 sup :: Handle -> Integer -> IO a
 sup h lastid = runReq defaultHttpConfig $ do
@@ -70,8 +70,8 @@ sup h lastid = runReq defaultHttpConfig $ do
   if responseId == lastid
   then liftIO $ sup h lastid
   else do
-    let txt = fromJust . incoming_text . fromJust . message . last . telegramResponseResult $ responseB
-    let ch = T.pack . show $ fromJust . cid . chat . fromJust . message . last . telegramResponseResult $ responseB
+    let txt = extractText . getText . extractMessage . getMessage $ responseB
+    let ch = T.pack . show $ fromJust . cid . chat . extractMessage . getMessage $ responseB
     let msg = EchoBot.hMessageFromText handle txt
     responses <- liftIO $ EchoBot.respond handle (EchoBot.MessageEvent msg)
     _ <- sendResponses responses ch
@@ -93,7 +93,6 @@ key4 = Button {text = "4", callback_data = "4"}
 key5 :: Button
 key5 = Button {text = "5", callback_data = "5"}
 
-
 keyboard :: Inline
 keyboard = Inline {inline_keyboard = [[key1, key2, key3, key4, key5]]}
 
@@ -108,7 +107,6 @@ sendMessage ch txt = req
                 ignoreResponse
                 (mconcat $ fmap (uncurry (=:)) [("chat_id", ch), ("text", txt)])
 
-
 sendKeyboard :: MonadHttp m => T.Text -> T.Text -> m IgnoreResponse
 sendKeyboard ch txt = req
               GET
@@ -120,4 +118,4 @@ sendKeyboard ch txt = req
 sendResponses :: MonadHttp m => [EchoBot.Response T.Text] -> T.Text -> m IgnoreResponse
 sendResponses [] ch = sendMessage ch "Please enter command or send a message"
 sendResponses (EchoBot.MessageResponse x : xs) ch = sendMessage ch x >> sendResponses xs ch
-sendResponses ((EchoBot.MenuResponse title _) : _) ch = sendKeyboard ch title
+sendResponses ((EchoBot.MenuResponse title _) : _) ch = sendKeyboard ch title 
