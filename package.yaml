@@ -26,7 +26,6 @@ dependencies:
 - hspec
 - aeson
 - bytestring
-- http-conduit
 - req
 
 ghc-options:
