@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
+{-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 
 module FrontEnd.Telegram where
 import Control.Concurrent
@@ -21,7 +22,7 @@ newtype Handle = Handle
 type ChatId = T.Text
 
 -- | Should be "sendMessage" or "sendSticker" for now
-type Method = T.Text 
+type Method = T.Text
 
 -- | Should be "sticker" or "text" for now
 type QueryParameter = T.Text
@@ -51,38 +52,64 @@ getMessage = message . last . telegramResponseResult
 getQuery :: TelegramResponse -> Maybe CallbackQuery
 getQuery = callback_query . last . telegramResponseResult
 
-checkContents :: TelegramResponse -> EchoBot.Handle IO T.Text -> Req IgnoreResponse
-checkContents responseB handle
-    | isJust (getQuery responseB) = parseCallbackQuery responseB handle "text"
-    | isJust (getMessage responseB) = case () of 
-       () |isJust (incoming_text . fromJust . getMessage $ responseB) -> parseIncomingText responseB handle "text"
-          |isJust (sticker . fromJust . getMessage $ responseB) -> parseIncomingSticker responseB handle "sticker"
+getQueryChatId :: TelegramResponse -> T.Text
+getQueryChatId = T.pack . show . fromJust . cid . chat . fromJust . query_message . fromJust . callback_query . last . telegramResponseResult
+
+getQueryNewCount :: TelegramResponse -> T.Text
+getQueryNewCount = fromJust . query_data . fromJust . callback_query . last . telegramResponseResult
+
+getMessageChatId :: TelegramResponse -> T.Text
+getMessageChatId = T.pack . show . fromJust . cid . chat . fromJust . getMessage
+
+getMessageText :: TelegramResponse -> T.Text
+getMessageText = fromJust . incoming_text . fromJust . getMessage
+
+getMessageSticker :: TelegramResponse -> T.Text
+getMessageSticker = file_id . fromJust . sticker . fromJust . getMessage
+
+getResponses :: TelegramResponse -> EchoBot.Handle IO T.Text -> Req IgnoreResponse
+getResponses responseB handle
+    | isJust (getQuery responseB) = handleCallbackQuery responseB handle "text"
+    | isJust (getMessage responseB) = case () of
+       () |isJust (incoming_text . fromJust . getMessage $ responseB) -> handleIncomingText responseB handle "text"
+          |isJust (sticker . fromJust . getMessage $ responseB) -> handleIncomingSticker responseB handle "sticker"
           |otherwise -> error "Unknown message type"
     | otherwise = error "Unknown reponse"
 
-parseCallbackQuery :: TelegramResponse -> EchoBot.Handle IO T.Text -> QueryParameter -> Req IgnoreResponse
-parseCallbackQuery responseB handle _ = do
-        let nc = fromJust . query_data . fromJust . callback_query . last . telegramResponseResult $ responseB
-        let ch = T.pack . show $ fromJust . cid . chat . fromJust . query_message . fromJust . callback_query . last . telegramResponseResult $ responseB
+getResponseCount :: EchoBot.Response p -> p
+getResponseCount (EchoBot.MessageResponse x) = x
+getResponseCount (EchoBot.MenuResponse _ _) = error "i'm not gonna do this i swear"
+
+handleCallbackQuery :: TelegramResponse -> EchoBot.Handle IO T.Text -> QueryParameter -> Req IgnoreResponse
+handleCallbackQuery responseB handle _ = do
+        let nc = getQueryNewCount responseB
+        let ch = getQueryChatId responseB
         let msg = EchoBot.hMessageFromText handle nc
-        responses <- liftIO $ EchoBot.respond handle (EchoBot.MessageEvent msg) 
-        liftIO $ print $ callback_query . last . telegramResponseResult $ responseB
-        sendResponses responses ch "sendMessage" "text"
+        responses <- liftIO $ EchoBot.respond handle (EchoBot.MessageEvent msg)
+        menuResponse <- liftIO $ EchoBot.respond handle (EchoBot.MessageEvent (EchoBot.hMessageFromText handle "/repeat"))
+        let [EchoBot.MenuResponse _ menu] = menuResponse
+        let gotCount = getResponseCount $ head responses
+        let count = read . T.unpack $ gotCount
+        let event = fromJust $ lookup count menu
+        _ <- liftIO $ EchoBot.respond handle event
+        _ <- sendMessage ch (T.replace "{count}" nc "Repetition count is set to {count}") "sendMessage" "text" 
+        sendResponses [] ch "sendMessage" "text"
 
-parseIncomingText :: TelegramResponse -> EchoBot.Handle IO T.Text -> QueryParameter -> Req IgnoreResponse
-parseIncomingText responseB handle param = do
-        let ch = T.pack . show $ fromJust . cid . chat . fromJust . getMessage $ responseB
-        let txt = fromJust . incoming_text . fromJust . getMessage $ responseB
+handleIncomingText :: TelegramResponse -> EchoBot.Handle IO T.Text -> QueryParameter -> Req IgnoreResponse
+handleIncomingText responseB handle param = do
+        let chatId = getMessageChatId responseB
+        let txt = getMessageText responseB
         let msg = EchoBot.hMessageFromText handle txt
-        responses <- liftIO $ EchoBot.respond handle (EchoBot.MessageEvent msg) 
-        sendResponses responses ch "sendMessage" param
+        responses <- liftIO $ EchoBot.respond handle (EchoBot.MessageEvent msg)
+        --liftIO $ print responses
+        sendResponses responses chatId "sendMessage" param
 
-parseIncomingSticker :: TelegramResponse -> EchoBot.Handle IO T.Text -> QueryParameter -> Req IgnoreResponse
-parseIncomingSticker responseB handle param = do
-        let ch = T.pack . show $ fromJust . cid . chat . fromJust . getMessage $ responseB
-        let getSticker = file_id . fromJust . sticker . fromJust . getMessage $ responseB
+handleIncomingSticker :: TelegramResponse -> EchoBot.Handle IO T.Text -> QueryParameter -> Req IgnoreResponse
+handleIncomingSticker responseB handle param = do
+        let ch = getMessageChatId responseB
+        let getSticker = getMessageSticker responseB
         let msg = EchoBot.hMessageFromText handle getSticker
-        responses <- liftIO $ EchoBot.respond handle (EchoBot.MessageEvent msg) 
+        responses <- liftIO $ EchoBot.respond handle (EchoBot.MessageEvent msg)
         sendResponses responses ch "sendSticker" param
 
 run :: FrontEnd.Telegram.Handle -> IO ()
@@ -97,8 +124,7 @@ sup h lastid = runReq defaultHttpConfig $ do
   if responseId == lastid
   then liftIO $ sup h lastid
   else do
-    _ <- checkContents responseB handle
-    liftIO $ print responseB
+    _ <- getResponses responseB handle
     liftIO $ threadDelay 100000
     liftIO $ sup h responseId
 
@@ -141,6 +167,6 @@ sendKeyboard chatId txt method _ = req
 
 sendResponses :: [EchoBot.Response T.Text] -> ChatId -> Method -> QueryParameter -> Req IgnoreResponse
 sendResponses [] chatId _ _ = sendMessage chatId "Please enter command or send a message" "sendMessage" "text"
-sendResponses (EchoBot.MessageResponse message : otherMessages) chatId method param = sendMessage chatId message method param >> 
+sendResponses (EchoBot.MessageResponse message : otherMessages) chatId method param = sendMessage chatId message method param >>
                                                                                       sendResponses otherMessages chatId method param
 sendResponses ((EchoBot.MenuResponse title _) : _) chatId method param = sendKeyboard chatId title method param
