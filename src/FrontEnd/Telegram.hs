@@ -14,10 +14,9 @@ import qualified Data.Text as T
 import Control.Monad.IO.Class ( MonadIO(liftIO) )
 
 
-newtype Handle = Handle
-  { hBotHandle :: EchoBot.Handle IO T.Text
-  }
-
+newtype Handle = Handle { 
+  hBotHandle :: EchoBot.Handle IO T.Text
+}
 
 type ChatId = T.Text
 
@@ -26,17 +25,6 @@ type Method = T.Text
 
 -- | Should be "sticker" or "text" for now
 type QueryParameter = T.Text
-
-data State = State
-  {
-    user  :: Integer,
-    chat_id :: Integer} deriving (Show)
-
-makeTempState :: State
-makeTempState = State {
-  user = 0,
-  chat_id = 0
-}
 
 makeRequest :: Req (JsonResponse TelegramResponse)
 makeRequest = req
@@ -76,24 +64,17 @@ getResponses responseB handle
           |otherwise -> error "Unknown message type"
     | otherwise = error "Unknown reponse"
 
-getResponseCount :: EchoBot.Response p -> p
-getResponseCount (EchoBot.MessageResponse x) = x
-getResponseCount (EchoBot.MenuResponse _ _) = error "i'm not gonna do this i swear"
-
 handleCallbackQuery :: TelegramResponse -> EchoBot.Handle IO T.Text -> QueryParameter -> Req IgnoreResponse
 handleCallbackQuery responseB handle _ = do
-        let nc = getQueryNewCount responseB
-        let ch = getQueryChatId responseB
-        let msg = EchoBot.hMessageFromText handle nc
-        responses <- liftIO $ EchoBot.respond handle (EchoBot.MessageEvent msg)
+        let newCount = getQueryNewCount responseB
+        let chatId = getQueryChatId responseB
         menuResponse <- liftIO $ EchoBot.respond handle (EchoBot.MessageEvent (EchoBot.hMessageFromText handle "/repeat"))
         let [EchoBot.MenuResponse _ menu] = menuResponse
-        let gotCount = getResponseCount $ head responses
-        let count = read . T.unpack $ gotCount
+        let count = read . T.unpack $ newCount
         let event = fromJust $ lookup count menu
         _ <- liftIO $ EchoBot.respond handle event
-        _ <- sendMessage ch (T.replace "{count}" nc "Repetition count is set to {count}") "sendMessage" "text" 
-        sendResponses [] ch "sendMessage" "text"
+        _ <- sendMessage chatId (T.replace "{count}" newCount "Repetition count is set to {count}") "sendMessage" "text" 
+        sendResponses [] chatId "sendMessage" "text"
 
 handleIncomingText :: TelegramResponse -> EchoBot.Handle IO T.Text -> QueryParameter -> Req IgnoreResponse
 handleIncomingText responseB handle param = do
@@ -101,16 +82,15 @@ handleIncomingText responseB handle param = do
         let txt = getMessageText responseB
         let msg = EchoBot.hMessageFromText handle txt
         responses <- liftIO $ EchoBot.respond handle (EchoBot.MessageEvent msg)
-        --liftIO $ print responses
         sendResponses responses chatId "sendMessage" param
 
 handleIncomingSticker :: TelegramResponse -> EchoBot.Handle IO T.Text -> QueryParameter -> Req IgnoreResponse
 handleIncomingSticker responseB handle param = do
-        let ch = getMessageChatId responseB
+        let chatId = getMessageChatId responseB
         let getSticker = getMessageSticker responseB
         let msg = EchoBot.hMessageFromText handle getSticker
         responses <- liftIO $ EchoBot.respond handle (EchoBot.MessageEvent msg)
-        sendResponses responses ch "sendSticker" param
+        sendResponses responses chatId "sendSticker" param
 
 run :: FrontEnd.Telegram.Handle -> IO ()
 run h = sup h 0
@@ -128,23 +108,12 @@ sup h lastid = runReq defaultHttpConfig $ do
     liftIO $ threadDelay 100000
     liftIO $ sup h responseId
 
-key1 :: Button
-key1 = Button {text = "1", callback_data = 1}
-
-key2 :: Button
-key2 = Button {text = "2", callback_data = 2}
-
-key3 :: Button
-key3 = Button {text = "3", callback_data = 3}
-
-key4 :: Button
-key4 = Button {text = "4", callback_data = 4}
-
-key5 :: Button
-key5 = Button {text = "5", callback_data = 5}
-
 keyboard :: Inline
-keyboard = Inline {inline_keyboard = [[key1, key2, key3, key4, key5]]}
+keyboard = Inline {inline_keyboard = [[Button {text = "1", callback_data = 1},
+                                       Button {text = "2", callback_data = 2},
+                                       Button {text = "3", callback_data = 3},
+                                       Button {text = "4", callback_data = 4},
+                                       Button {text = "5", callback_data = 5}]]}
 
 keyboardEncoded :: T.Text
 keyboardEncoded = read . show $ encode keyboard
