@@ -36,7 +36,6 @@ runTelegramFrontEnd botHandle =
   FrontEnd.Telegram.run
     FrontEnd.Telegram.Handle {FrontEnd.Telegram.hBotHandle = botHandle} 
 
-
 withLogHandle :: (Logger.Handle IO -> IO ()) -> IO ()
 withLogHandle f = do
   config <- Config.getLoggerConfig
