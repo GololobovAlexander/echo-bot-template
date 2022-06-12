@@ -129,13 +129,6 @@ respond h (MessageEvent message)
   | fromJust (hTextFromMessage h message) == "/help" = handleHelpCommand h
   | otherwise = respondWithEchoedMessage h message
 
--- isCommand :: Handle m a -> T.Text -> a -> Bool              -- template was trolling me. should redo later maybe
--- isCommand h _ message = case hTextFromMessage h message of
---   Nothing -> False
---   Just "/help" -> True
---   Just "/repeat" -> True
---   Just _ -> False
-
 handleHelpCommand :: Monad m => Handle m a -> m [Response a]
 handleHelpCommand h = do
   Logger.logInfo (hLogHandle h) "Got the help command"
