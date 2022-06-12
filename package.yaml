@@ -27,6 +27,7 @@ dependencies:
 - aeson
 - bytestring
 - req
+- containers
 
 ghc-options:
 - -Wall
