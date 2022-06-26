@@ -47,7 +47,7 @@ instance FromJSON Message where
   parseJSON _ = mzero
 
 data From = From {
-  from_id         :: Integer,
+  from_id         :: Int,
   is_bot          :: Bool,
   from_first_name :: Maybe Text,
   from_username   :: Maybe Text,
@@ -86,7 +86,7 @@ instance ToJSON Inline where
 
 data CallbackQuery = CallbackQuery {
   -- | Unique identifier for this query
-  query_id          :: Text,
+  query_id          :: String,
   -- | Sender
   query_from        :: From,
   -- | Optional. Message with the callback button that originated the query

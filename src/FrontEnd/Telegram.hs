@@ -1,102 +1,22 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
-
 module FrontEnd.Telegram where
-import Data.Aeson (encode)
 import Network.HTTP.Req
-import Token (token)
 import JSONparsing
-import qualified EchoBot
-import Data.Maybe (fromJust, isJust, fromMaybe)
 import qualified Data.Text as T
+import Token ( token )
+import qualified EchoBot
+import Data.Maybe ( fromJust, isJust, fromMaybe )
 import Control.Monad.IO.Class ( MonadIO(liftIO) )
+import Data.Aeson (encode)
 import qualified Data.Map as Map
+import Logger ((.<))
+import qualified Logger
 
 newtype Handle = Handle {
   hBotHandle :: EchoBot.Handle IO T.Text
 }
 
-newtype State = State {
-  hGetState :: EchoBot.State
-} 
-
 type ChatId = T.Text
-
--- | Should be "sendMessage" or "sendSticker" for now
-type Method = T.Text
-
--- | Should be "sticker" or "text" for now
-type QueryParameter = T.Text
-
-makeRequest :: Req (JsonResponse TelegramResponse)
-makeRequest = req
-                GET
-                (https "api.telegram.org" /: T.pack ("bot" ++ token) /: "getUpdates")
-                NoReqBody
-                jsonResponse
-                mempty
-
-getMessage :: TelegramResponse -> Maybe Message
-getMessage = message . last . telegramResponseResult
-
-getQuery :: TelegramResponse -> Maybe CallbackQuery
-getQuery = callback_query . last . telegramResponseResult
-
-getQueryChatId :: TelegramResponse -> T.Text
-getQueryChatId = T.pack . show . fromJust . cid . chat . fromJust . query_message . fromJust . callback_query . last . telegramResponseResult
-
-getQueryNewCount :: TelegramResponse -> T.Text
-getQueryNewCount = fromJust . query_data . fromJust . callback_query . last . telegramResponseResult
-
-getMessageChatId :: TelegramResponse -> T.Text
-getMessageChatId = T.pack . show . fromJust . cid . chat . fromJust . getMessage
-
-getMessageText :: TelegramResponse -> T.Text
-getMessageText = fromJust . incoming_text . fromJust . getMessage
-
-getMessageSticker :: TelegramResponse -> T.Text
-getMessageSticker = file_id . fromJust . sticker . fromJust . getMessage
-
-getResponses :: TelegramResponse -> Handle -> Req IgnoreResponse
-getResponses responseB handle
---     | isJust (getQuery responseB) = handleCallbackQuery responseB handle "text"
-    | isJust (getMessage responseB) = case () of
-       () |isJust (incoming_text . fromJust . getMessage $ responseB) -> handleIncomingText responseB handle "text"
-          |isJust (sticker . fromJust . getMessage $ responseB) -> handleIncomingSticker responseB handle "sticker"
-          |otherwise -> error "Unknown message type"
-    | otherwise = error "Unknown reponse"
-
--- handleCallbackQuery :: TelegramResponse -> Handle -> QueryParameter -> Req IgnoreResponse
--- handleCallbackQuery responseB h _ = do
---         let newCount = getQueryNewCount responseB
---         let chatId = getQueryChatId responseB
---         let handle = hBotHandle h
---         menuResponse <- liftIO $ EchoBot.respond handle (EchoBot.MessageEvent (EchoBot.hMessageFromText handle "/repeat"))
---         let [EchoBot.MenuResponse _ menu] = menuResponse
---         let count = read . T.unpack $ newCount
---         let event = fromJust $ lookup count menu
-
---         _ <- liftIO $ EchoBot.respond handle event
---         _ <- sendMessage chatId (T.replace "{count}" newCount "Repetition count is set to {count}") "sendMessage" "text"
---         sendResponses [] chatId "sendMessage" "text"
-
-handleIncomingText :: TelegramResponse -> Handle -> QueryParameter -> Req IgnoreResponse
-handleIncomingText responseB h param = do
-        let chatId = getMessageChatId responseB
-        let txt = getMessageText responseB
-        let handle = hBotHandle h
-        let msg = EchoBot.hMessageFromText handle txt
-        responses <- liftIO $ EchoBot.respond handle (EchoBot.MessageEvent msg)
-        sendResponses responses chatId "sendMessage" param
-
-handleIncomingSticker :: TelegramResponse -> Handle -> QueryParameter -> Req IgnoreResponse
-handleIncomingSticker responseB h param = do
-        let chatId = getMessageChatId responseB
-        let getSticker = getMessageSticker responseB
-        let handle = hBotHandle h
-        let msg = EchoBot.hMessageFromText handle getSticker
-        responses <- liftIO $ EchoBot.respond handle (EchoBot.MessageEvent msg)
-        sendResponses responses chatId "sendSticker" param
 
 keyboard :: Inline
 keyboard = Inline {inline_keyboard = [[Button {text = "1", callback_data = 1},
@@ -108,69 +28,133 @@ keyboard = Inline {inline_keyboard = [[Button {text = "1", callback_data = 1},
 keyboardEncoded :: T.Text
 keyboardEncoded = read . show $ encode keyboard
 
-sendMessage :: ChatId -> T.Text -> Method -> QueryParameter -> Req IgnoreResponse
-sendMessage chatId txt method param = req
+getMessage :: TelegramResponse -> Maybe Message
+getMessage = message . last . telegramResponseResult
+
+getQuery :: TelegramResponse -> Maybe CallbackQuery
+getQuery = callback_query . last . telegramResponseResult
+
+getQueryChatId :: TelegramResponse -> T.Text
+getQueryChatId = T.pack . show . fromJust . cid . chat . fromJust . query_message . fromJust . getQuery
+
+
+getQueryNewCount :: TelegramResponse -> Maybe T.Text
+getQueryNewCount = query_data . fromJust . getQuery
+
+getMessageChatId :: TelegramResponse -> T.Text
+getMessageChatId = T.pack . show . fromJust . cid . chat . fromJust . getMessage
+
+
+getMessageText :: TelegramResponse -> Maybe T.Text
+getMessageText = incoming_text . fromJust . getMessage
+
+getMessageSticker :: TelegramResponse -> Maybe Sticker
+getMessageSticker = sticker . fromJust . getMessage
+
+getUpdateId :: [Result] -> Integer
+getUpdateId = update_id . last
+
+makeRequest :: [(T.Text, T.Text)] -> IO (JsonResponse TelegramResponse)
+makeRequest params = runReq defaultHttpConfig $ req
+                GET
+                (https "api.telegram.org" /: T.pack ("bot" ++ token) /: "getUpdates")
+                NoReqBody
+                jsonResponse
+                (mconcat $ fmap (uncurry (=:)) params)
+
+sendRequest :: T.Text -> [(T.Text, T.Text)] -> IO IgnoreResponse
+sendRequest method params = runReq defaultHttpConfig $ req
                 POST
                 (https "api.telegram.org" /: T.pack ("bot" ++ token) /: method)
                 NoReqBody
                 ignoreResponse
-                (mconcat $ fmap (uncurry (=:)) [("chat_id", chatId), (param, txt)])
+                (mconcat $ fmap (uncurry (=:)) params)
 
-sendKeyboard :: ChatId -> T.Text -> Method -> QueryParameter -> Req IgnoreResponse
-sendKeyboard chatId txt method _ = req
-                POST
-                (https "api.telegram.org" /: T.pack ("bot" ++ token) /: method)
-                NoReqBody
-                ignoreResponse
-                (mconcat $ fmap (uncurry (=:)) [("chat_id", chatId), ("text", txt), ("reply_markup", keyboardEncoded)])
+getUpdate :: Integer -> IO (JsonResponse TelegramResponse)
+getUpdate (-1) = getUpdate 0
+getUpdate n = makeRequest [("offset", T.pack $ show n), ("timeout", T.pack $ show (100 :: Integer))]
 
-sendResponses :: [EchoBot.Response T.Text] -> ChatId -> Method -> QueryParameter -> Req IgnoreResponse
-sendResponses [] chatId _ _ = sendMessage chatId "Please enter command or send a message" "sendMessage" "text"
-sendResponses (EchoBot.MessageResponse firstMessage : otherMessages) chatId method param = sendMessage chatId firstMessage method param >>
-                                                                                      sendResponses otherMessages chatId method param
-sendResponses ((EchoBot.MenuResponse title _) : _) chatId method param = sendKeyboard chatId title method param
+sendMessage :: ChatId -> T.Text -> IO IgnoreResponse
+sendMessage chatId txt = sendRequest "sendMessage" [("chat_id", chatId), ("text", txt)]
 
-repCounts :: Map.Map Integer Int
-repCounts = Map.empty
+sendKeyboard :: ChatId -> T.Text -> IO IgnoreResponse
+sendKeyboard chatId txt = sendRequest "sendMessage" [("chat_id", chatId), ("text", txt), ("reply_markup", keyboardEncoded)]
 
-getUserId :: TelegramResponse -> Integer
-getUserId responseB
-        | isJust (getMessage responseB) = from_id . from . fromJust . getMessage $ responseB
-        | isJust (getQuery responseB) = from_id . query_from . fromJust . getQuery $ responseB
-        | otherwise = error ""
+sendSticker :: ChatId -> T.Text -> IO IgnoreResponse
+sendSticker chatId stickerId = sendRequest "sendSticker" [("chat_id", chatId), ("text", stickerId)]
 
-checkUserInHandles :: Integer -> Handle -> Map.Map Integer Handle -> Handle
-checkUserInHandles userId handle mapHandles =
-        fromMaybe handle (Map.lookup userId mapHandles)
+
+handleResponse :: Handle -> Map.Map Int Int -> [(Int, EchoBot.Event T.Text)] -> TelegramResponse -> IO ()
+handleResponse handle repetitionMap menu responseB
+  | isJust (getQuery responseB) = handleQuery handle repetitionMap menu responseB
+  | isJust (getMessageSticker responseB) = handleSticker handle repetitionMap menu responseB
+  | isJust (getMessageText responseB) = handleText handle repetitionMap menu responseB
+  | otherwise = handleError handle repetitionMap menu responseB
+
+handleQuery :: Handle -> Map.Map Int Int -> [(Int, EchoBot.Event T.Text)] -> TelegramResponse -> IO ()
+handleQuery handle repetitionMap menu responseB = do
+  let repCount = read . T.unpack . fromJust . getQueryNewCount $ responseB :: Int
+  let userId = from_id . query_from . fromJust . getQuery $ responseB
+  let update = update_id . last . telegramResponseResult $ responseB
+  Logger.logInfo (EchoBot.hLogHandle $ hBotHandle handle) $ "The user has set the repetition count to " .< repCount
+  --let chatId = fromJust . chat_instance . fromJust . getQuery $ responseB
+  runHelper handle (Map.insert userId repCount repetitionMap) menu (update + 1)
+
+handleSticker :: Handle -> Map.Map Int Int -> [(Int, EchoBot.Event T.Text)] -> TelegramResponse -> IO ()
+handleSticker handle repetitionMap menu responseB = do
+  let stickerId = file_id . fromJust . getMessageSticker $ responseB
+  let chatId = T.pack . show . fromJust . cid . chat . fromJust . message . last . telegramResponseResult $ responseB 
+  let msg = EchoBot.hMessageFromText (hBotHandle handle) stickerId
+  let userId = from_id . from . fromJust . message . last . telegramResponseResult $ responseB
+  let event = fromJust $ lookup userId menu
+  let update = update_id . last . telegramResponseResult $ responseB
+  _ <- liftIO $ EchoBot.respond (hBotHandle handle) event
+  responses <- liftIO $ EchoBot.respond (hBotHandle handle) (EchoBot.MessageEvent msg)
+  _ <- handleBotResponse responses chatId
+  runHelper handle repetitionMap menu (update + 1)
+  
+handleText :: Handle -> Map.Map Int Int -> [(Int, EchoBot.Event T.Text)] -> TelegramResponse -> IO ()
+handleText handle repetitionMap menu responseB = do
+  let chatId = T.pack . show . fromJust . cid . chat . fromJust . message . last . telegramResponseResult $ responseB 
+  let userId = from_id . from . fromJust . message . last . telegramResponseResult $ responseB
+  let repCount = fromMaybe 1 $ Map.lookup userId repetitionMap
+  let event = fromJust $ lookup repCount menu
+  let txt = fromJust $ getMessageText responseB
+  let msg = EchoBot.hMessageFromText (hBotHandle handle) txt
+  let update = update_id . last . telegramResponseResult $ responseB
+  _ <- liftIO $ EchoBot.respond (hBotHandle handle) event  
+  responses <- liftIO $ EchoBot.respond (hBotHandle handle) (EchoBot.MessageEvent msg)
+  _ <- handleBotResponse responses chatId
+  runHelper handle repetitionMap menu (update + 1)
+
+handleError :: Handle -> Map.Map Int Int -> [(Int, EchoBot.Event T.Text)] -> TelegramResponse -> IO ()
+handleError handle repetitionMap menu responseB = do
+  Logger.logInfo (EchoBot.hLogHandle $ hBotHandle handle) "Unknown type of media was sent"
+  let chatId = T.pack . show . fromJust . cid . chat . fromJust . message . last . telegramResponseResult $ responseB
+  let update = update_id . last . telegramResponseResult $ responseB
+  _ <- sendMessage chatId "This type of media is not supported"
+  runHelper handle repetitionMap menu (update + 1)
+
+handleBotResponse :: [EchoBot.Response T.Text] -> ChatId -> IO IgnoreResponse
+handleBotResponse [] chatId  = sendMessage chatId "Please enter command or send a message"
+handleBotResponse (EchoBot.MessageResponse firstMessage : otherMessages) chatId = sendMessage chatId firstMessage >> handleBotResponse otherMessages chatId
+handleBotResponse ((EchoBot.MenuResponse title _) : _) chatId = sendKeyboard chatId title
+
+unpackResponse :: [EchoBot.Response a] -> Maybe [(Int, EchoBot.Event a)]
+unpackResponse ((EchoBot.MenuResponse _ x) : _) = Just x
+unpackResponse _ = Nothing
 
 run :: Handle -> IO ()
-run h = sup h 0 repCounts
+run handle = do
+  menu <- liftIO $ EchoBot.respond (hBotHandle handle) (EchoBot.MessageEvent (EchoBot.hMessageFromText (hBotHandle handle) "/repeat"))
+  let menuResponse = fromJust $ unpackResponse menu -- we always will get Just, so we don't have to worry about problems that fromJust can cause
+  runHelper handle Map.empty menuResponse (-1)
 
-sup :: Handle -> Integer -> Map.Map Integer Int -> IO a
-sup h lastid mapHandles = runReq defaultHttpConfig $ do
-  let handle = hBotHandle h
-  response <- makeRequest
-  let responseB = responseBody response :: TelegramResponse
-  let result = telegramResponseResult responseB
-  let userId = getUserId responseB
-  if null result
-  then liftIO $ sup h lastid mapHandles
+runHelper :: Handle -> Map.Map Int Int -> [(Int, EchoBot.Event T.Text)] -> Integer -> IO ()
+runHelper handle mapHandles menu n = runReq defaultHttpConfig $ do
+  responses <- liftIO $ getUpdate n
+  let responseB = responseBody responses :: TelegramResponse
+  if null $ telegramResponseResult responseB
+  then do liftIO $ runHelper handle mapHandles menu n
   else do
-        if isJust (getQuery responseB)
-        then do
-                let newCount = getQueryNewCount responseB
-                let count = read . T.unpack $ newCount 
-                liftIO $ sup h lastid (Map.insert userId count mapHandles)
-        else do
-                let responseId = update_id . last $ result 
-                let newCount = fromMaybe 1 (Map.lookup userId mapHandles)
-                if responseId == lastid
-                then do
-                        liftIO $ sup h lastid (Map.insert userId newCount mapHandles)
-                else do
-                        menuResponse <- liftIO $ EchoBot.respond handle (EchoBot.MessageEvent (EchoBot.hMessageFromText handle "/repeat"))
-                        let [EchoBot.MenuResponse _ menu] = menuResponse
-                        let event = fromJust $ lookup newCount menu
-                        _ <- liftIO $ EchoBot.respond handle event
-                        _ <- getResponses responseB h
-                        liftIO $ sup h responseId (Map.insert userId newCount mapHandles)
+    liftIO $ handleResponse handle mapHandles menu responseB
