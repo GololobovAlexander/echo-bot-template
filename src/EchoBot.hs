@@ -6,7 +6,7 @@
 module EchoBot
   ( makeState,
     respond,
-    Event (MessageEvent),
+    Event (MessageEvent, SetRepetitionCountEvent),
     Response (..),
     State,
     Handle (..),
